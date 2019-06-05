@@ -15,23 +15,30 @@ import Brick.Types
 import Brick.Widgets.Border (borderWithLabel)
 import Brick.Widgets.Core ((<+>), (<=>), str, txt)
 import Control.Applicative (pure)
+import Control.Arrow ((>>>))
 import Control.Monad (void)
+import Data.Bool (Bool, (||), not)
 import Data.Char (Char)
+import Data.Foldable (foldMap, toList)
 import Data.Function (($), (.))
 import Data.Functor ((<$>))
-import qualified Data.List (unlines)
+import qualified Data.List (filter, unlines)
 import Data.Map (elems)
+import qualified Data.Map (fromList)
 import Data.Maybe (Maybe(..), listToMaybe)
 import Data.Monoid ((<>), mempty)
-import Data.Ord (Ord, max, min)
+import Data.Ord (Ord, (<), (>=), max, min)
+import Data.Set (Set, difference, filter, insert, singleton)
+import qualified Data.Set (fromList)
 import Data.String (String)
 import Data.Text.Lazy (Text, toStrict, unlines)
+import Data.Tuple (fst, snd)
 import Graphics.Vty (defAttr)
 import Graphics.Vty.Input.Events (Event(EvKey), Key(KChar, KEsc))
 import Lens.Micro ((%~), (&), (.~), (^.))
 import Minicity.Point (Point(..))
 import Minicity.Types
-import Prelude (Int, (+))
+import Prelude (Int, (+), (-))
 import System.IO (IO)
 import Text.Pretty.Simple (pShow)
 import Text.Show (show)
@@ -119,6 +126,39 @@ moveCursor p s =
           (clampPos (s ^. cityGrid . height) y)
    in s & cityGrid . gridSelected %~ (clampCursor . (+ p))
 
+reachableFrom :: CityState -> Point -> [(Point, GridPoint)]
+reachableFrom s = reachableFrom' mempty
+  where
+    gridWidth = s ^. cityGrid . width
+    gridHeight = s ^. cityGrid . height
+    neighbors :: Point -> Set Point
+    neighbors (Point x y) =
+      Data.Set.fromList
+        [Point (x - 1) y, Point (x + 1) y, Point x (y + 1), Point x (y - 1)]
+    neighborOob :: Point -> Bool
+    neighborOob (Point x y) =
+      x < 0 || x >= gridWidth || y < 0 || y >= gridHeight
+    validNeighbors :: Point -> Set Point
+    validNeighbors = filter (neighborOob >>> not) . neighbors
+    resolve :: Point -> GridPoint
+    resolve p = s ^. cityGrid . grid . gridAtWithDefault p
+    reachableFrom' :: Set Point -> Point -> [(Point, GridPoint)]
+    reachableFrom' visited p =
+      let nbsSet :: Set Point
+          nbsSet = validNeighbors p `difference` visited
+          nbs :: [(Point, GridPoint)]
+          nbs = [(n, resolve n) | n <- toList nbsSet]
+          streets :: Set Point
+          streets =
+            foldMap
+              (fst >>> singleton)
+              (Data.List.filter (snd >>> isStreet) nbs)
+          rest :: [(Point, GridPoint)]
+          rest = Data.List.filter (snd >>> isStreet >>> not) nbs
+          newVisited = p `insert` visited
+          recursion = foldMap (reachableFrom' newVisited) streets
+       in rest <> recursion
+
 place :: CityState -> GridPoint -> CityState
 place s p = s & citySelectedPoint .~ p
 
@@ -145,6 +185,28 @@ cityStartEvent = pure
 cityAttrMap :: CityState -> AttrMap
 cityAttrMap _ = attrMap defAttr mempty
 
+sampleCity :: CityState
+sampleCity =
+  CityState
+    { _cityGrid =
+        PointedGrid
+          { _grid =
+              Grid
+                { _gridSize = Point 8 8
+                , _gridData =
+                    Data.Map.fromList
+                      [ (Point 1 1, House Nothing)
+                      , (Point 2 1, Street)
+                      , (Point 3 1, Street)
+                      , (Point 4 1, Store Nothing)
+                      ]
+                }
+          , _gridSelected = Point 0 0
+          }
+    , _cityPeople = mempty
+    , _cityYear = 0
+    }
+
 main :: IO ()
 main = do
   let app =
@@ -155,5 +217,6 @@ main = do
           , appStartEvent = cityStartEvent
           , appAttrMap = cityAttrMap
           }
-      initialState = emptyCityState (Point 8 8)
+      --initialState = emptyCityState (Point 8 8)
+      initialState = sampleCity
   void (defaultMain app initialState)

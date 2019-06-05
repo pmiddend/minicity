@@ -4,6 +4,7 @@
 module Minicity.Types where
 
 import Brick.Types (Widget)
+import Data.Bool (Bool(False, True))
 import Data.Eq (Eq)
 import Data.Function ((.))
 import Data.Int (Int)
@@ -61,7 +62,13 @@ data GridPoint
   | Nature
   deriving (Eq, Show)
 
-makeLenses ''GridPoint
+isStreet :: GridPoint -> Bool
+isStreet Street = True
+isStreet _ = False
+
+isNature :: GridPoint -> Bool
+isNature Nature = True
+isNature _ = False
 
 data Grid =
   Grid
