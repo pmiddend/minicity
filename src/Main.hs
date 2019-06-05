@@ -43,18 +43,6 @@ import System.IO (IO)
 import Text.Pretty.Simple (pShow)
 import Text.Show (show)
 
-emptyCityState :: Point -> CityState
-emptyCityState gs =
-  CityState
-    { _cityGrid =
-        PointedGrid
-          { _grid = Grid {_gridSize = gs, _gridData = mempty}
-          , _gridSelected = Point 0 0
-          }
-    , _cityPeople = mempty
-    , _cityYear = 0
-    }
-
 gridPointToChar :: GridPoint -> Char
 gridPointToChar (House _) = 'H'
 gridPointToChar (Store _) = 'S'
@@ -103,7 +91,14 @@ cityDraw s =
           (txt (toStrict (peopleString (s ^. cityPeople))))
       statusStr = "Year " <> show (s ^. cityYear)
       statusWidget = str statusStr
-   in [statusWidget <=> ((cityWidget <=> currentPointWidget) <+> personWidget)]
+      logLineToStr (year, line) = "Year " <> show year <> ": " <> line
+      logWidget =
+        borderWithLabel
+          (str "Log")
+          (str (Data.List.unlines (logLineToStr <$> (s ^. cityLog))))
+   in [ statusWidget <=>
+        ((cityWidget <=> currentPointWidget) <+> (personWidget <=> logWidget))
+      ]
 
 cityChooseCursor ::
      CityState
@@ -185,6 +180,22 @@ cityStartEvent = pure
 cityAttrMap :: CityState -> AttrMap
 cityAttrMap _ = attrMap defAttr mempty
 
+simulation :: CityState -> CityState
+simulation s = s
+
+emptyCityState :: Point -> CityState
+emptyCityState gs =
+  CityState
+    { _cityGrid =
+        PointedGrid
+          { _grid = Grid {_gridSize = gs, _gridData = mempty}
+          , _gridSelected = Point 0 0
+          }
+    , _cityPeople = mempty
+    , _cityYear = 0
+    , _cityLog = mempty
+    }
+
 sampleCity :: CityState
 sampleCity =
   CityState
@@ -205,6 +216,7 @@ sampleCity =
           }
     , _cityPeople = mempty
     , _cityYear = 0
+    , _cityLog = mempty
     }
 
 main :: IO ()

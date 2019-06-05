@@ -11,6 +11,7 @@ import Data.Int (Int)
 import Data.Map (Map)
 import Data.Maybe (Maybe)
 import Data.Set (Set)
+import Data.String (String)
 import Lens.Micro (Lens', (^.), at, non)
 import Lens.Micro.GHC ()
 import Lens.Micro.TH (makeLenses)
@@ -109,6 +110,7 @@ data CityState =
     { _cityGrid :: PointedGrid
     , _cityPeople :: CityPeople
     , _cityYear :: Int
+    , _cityLog :: [(Int, String)]
     }
 
 makeLenses ''CityState
