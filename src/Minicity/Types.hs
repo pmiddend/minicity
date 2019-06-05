@@ -10,11 +10,12 @@ import Data.Int (Int)
 import Data.Map (Map)
 import Data.Maybe (Maybe)
 import Data.Set (Set)
-import Lens.Micro (Lens', at, non)
+import Lens.Micro (Lens', (^.), at, non)
 import Lens.Micro.GHC ()
 import Lens.Micro.TH (makeLenses)
 import Minicity.Point (Point, _x, _y)
 import Prelude (Integer)
+import Text.Show (Show)
 
 type PersonId = Integer
 
@@ -22,7 +23,7 @@ data PersonData =
   PersonData
     { _personId :: PersonId
     }
-  deriving (Eq)
+  deriving (Eq, Show)
 
 makeLenses ''PersonData
 
@@ -31,7 +32,7 @@ data IndustryData =
     { _industryWorkers :: Set PersonId
     , _industryCapacity :: Int
     }
-  deriving (Eq)
+  deriving (Eq, Show)
 
 makeLenses ''IndustryData
 
@@ -40,7 +41,7 @@ data StoreData =
     { _storeCustomers :: Set PersonId
     , _storeCapacity :: Int
     }
-  deriving (Eq)
+  deriving (Eq, Show)
 
 makeLenses ''StoreData
 
@@ -48,7 +49,7 @@ data HouseData =
   HouseData
     { _houseInhabitants :: Set PersonId
     }
-  deriving (Eq)
+  deriving (Eq, Show)
 
 makeLenses ''HouseData
 
@@ -58,7 +59,7 @@ data GridPoint
   | Industry (Maybe IndustryData)
   | Street
   | Nature
-  deriving (Eq)
+  deriving (Eq, Show)
 
 makeLenses ''GridPoint
 
@@ -94,13 +95,19 @@ instance HasDimensions PointedGrid where
 gridAtWithDefault :: Point -> Lens' Grid GridPoint
 gridAtWithDefault p = gridData . at p . non Nature
 
+type CityPeople = Map PersonId PersonData
+
 data CityState =
   CityState
     { _cityGrid :: PointedGrid
-    , _cityPeople :: Map PersonId PersonData
+    , _cityPeople :: CityPeople
     }
 
 makeLenses ''CityState
+
+citySelectedPoint :: Lens' CityState GridPoint
+citySelectedPoint f s =
+  (cityGrid . grid) (gridAtWithDefault (s ^. cityGrid . gridSelected) f) s
 
 type CityUiName = ()
 

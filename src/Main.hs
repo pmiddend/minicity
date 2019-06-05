@@ -11,27 +11,29 @@ import Brick.Types
   , Result(..)
   , Size(Fixed)
   , Widget(..)
-  , getContext
   )
 import Brick.Widgets.Border (borderWithLabel)
-import Brick.Widgets.Core (str)
+import Brick.Widgets.Core ((<+>), (<=>), str, txt)
 import Control.Applicative (pure)
 import Control.Monad (void)
 import Data.Char (Char)
 import Data.Function (($), (.))
 import Data.Functor ((<$>))
-import Data.List (unlines)
+import qualified Data.List (unlines)
+import Data.Map (elems)
 import Data.Maybe (Maybe(..), listToMaybe)
 import Data.Monoid (mempty)
 import Data.Ord (Ord, max, min)
 import Data.String (String)
+import Data.Text.Lazy (Text, toStrict, unlines)
 import Graphics.Vty (defAttr)
 import Graphics.Vty.Input.Events (Event(EvKey), Key(KChar, KEsc))
-import Lens.Micro ((%~), (&), (^.))
+import Lens.Micro ((%~), (&), (.~), (^.))
 import Minicity.Point (Point(..))
 import Minicity.Types
-import Prelude (Int, (+), undefined)
+import Prelude (Int, (+))
 import System.IO (IO)
+import Text.Pretty.Simple (pShow)
 
 emptyCityState :: Point -> CityState
 emptyCityState gs =
@@ -59,7 +61,7 @@ gridToString g =
            (\x -> gridPointToChar (g ^. gridAtWithDefault (Point x y))) <$>
            [0 .. (g ^. width)]) <$>
         rows
-   in unlines lines
+   in Data.List.unlines lines
 
 toTuple :: Point -> (Int, Int)
 toTuple (Point x y) = (x, y)
@@ -73,12 +75,24 @@ gridToWidget g cursor =
     strRendering <- render (str (gridToString g))
     pure (strRendering {cursors = [CursorLocation (toLocation cursor) Nothing]})
 
+peopleString :: CityPeople -> Text
+peopleString p = unlines (pShow <$> elems p)
+
 cityDraw :: CityState -> [CityWidget]
 cityDraw s =
-  [ borderWithLabel
-      (str "City")
-      (gridToWidget (s ^. cityGrid . grid) (s ^. cityGrid . gridSelected))
-  ]
+  let cityWidget =
+        borderWithLabel
+          (str "City")
+          (gridToWidget (s ^. cityGrid . grid) (s ^. cityGrid . gridSelected))
+      currentPoint :: Text
+      currentPoint = pShow (s ^. citySelectedPoint)
+      currentPointWidget =
+        borderWithLabel (str "Cursor") (txt (toStrict currentPoint))
+      personWidget =
+        borderWithLabel
+          (str "People")
+          (txt (toStrict (peopleString (s ^. cityPeople))))
+   in [(cityWidget <=> currentPointWidget) <+> personWidget]
 
 cityChooseCursor ::
      CityState
@@ -101,6 +115,9 @@ moveCursor p s =
           (clampPos (s ^. cityGrid . height) y)
    in s & cityGrid . gridSelected %~ (clampCursor . (+ p))
 
+place :: CityState -> GridPoint -> CityState
+place s p = s & citySelectedPoint .~ p
+
 cityHandleEvent ::
      CityState
   -> BrickEvent CityUiName CityUiEvent
@@ -108,6 +125,10 @@ cityHandleEvent ::
 cityHandleEvent s e =
   case e of
     VtyEvent (EvKey KEsc _) -> halt s
+    VtyEvent (EvKey (KChar 'H') _) -> continue (place s (House Nothing))
+    VtyEvent (EvKey (KChar '#') _) -> continue (place s Street)
+    VtyEvent (EvKey (KChar 'S') _) -> continue (place s (Store Nothing))
+    VtyEvent (EvKey (KChar 'I') _) -> continue (place s (Industry Nothing))
     VtyEvent (EvKey (KChar 'h') _) -> continue (moveCursor (Point (-1) 0) s)
     VtyEvent (EvKey (KChar 'l') _) -> continue (moveCursor (Point 1 0) s)
     VtyEvent (EvKey (KChar 'j') _) -> continue (moveCursor (Point 0 1) s)
