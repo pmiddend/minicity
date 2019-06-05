@@ -1,0 +1,9 @@
+* minicity
+
+** What is it?
+
+It’s a simulator for a small city. You can build houses, stores and work places and see people move in, live, and die.
+
+** Current state
+
+Nothing is finished yet. Be patient
