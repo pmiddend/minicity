@@ -19,6 +19,7 @@ import Control.Arrow ((>>>))
 import Control.Monad (void)
 import Data.Bool (Bool, (||), not)
 import Data.Char (Char)
+import Data.Eq ((==))
 import Data.Foldable (foldMap, toList)
 import Data.Function (($), (.))
 import Data.Functor ((<$>))
@@ -35,7 +36,7 @@ import Data.Text.Lazy (Text, toStrict, unlines)
 import Data.Tuple (fst, snd)
 import Graphics.Vty (defAttr)
 import Graphics.Vty.Input.Events (Event(EvKey), Key(KChar, KEsc))
-import Lens.Micro ((%~), (&), (.~), (^.))
+import Lens.Micro ((%~), (&), (+~), (.~), (<>~), (^.))
 import Minicity.Point (Point(..))
 import Minicity.Types
 import Prelude (Int, (+), (-))
@@ -85,10 +86,13 @@ cityDraw s =
       currentPoint = pShow (s ^. citySelectedPoint)
       currentPointWidget =
         borderWithLabel (str "Cursor") (txt (toStrict currentPoint))
+      peopleText = (toStrict (peopleString (s ^. cityPeople)))
       personWidget =
         borderWithLabel
           (str "People")
-          (txt (toStrict (peopleString (s ^. cityPeople))))
+          (if s ^. cityPeople == mempty
+             then str "No inhabitants"
+             else txt peopleText)
       statusStr = "Year " <> show (s ^. cityYear)
       statusWidget = str statusStr
       logLineToStr (year, line) = "Year " <> show year <> ": " <> line
@@ -166,6 +170,7 @@ cityHandleEvent s e =
     VtyEvent (EvKey KEsc _) -> halt s
     VtyEvent (EvKey (KChar 'H') _) -> continue (place s (House Nothing))
     VtyEvent (EvKey (KChar '#') _) -> continue (place s Street)
+    VtyEvent (EvKey (KChar ' ') _) -> continue (simulation s)
     VtyEvent (EvKey (KChar 'S') _) -> continue (place s (Store Nothing))
     VtyEvent (EvKey (KChar 'I') _) -> continue (place s (Industry Nothing))
     VtyEvent (EvKey (KChar 'h') _) -> continue (moveCursor (Point (-1) 0) s)
@@ -181,7 +186,7 @@ cityAttrMap :: CityState -> AttrMap
 cityAttrMap _ = attrMap defAttr mempty
 
 simulation :: CityState -> CityState
-simulation s = s
+simulation s = s & cityLog <>~ [(s ^. cityYear, "simulated")] & cityYear +~ 1
 
 emptyCityState :: Point -> CityState
 emptyCityState gs =
@@ -216,7 +221,7 @@ sampleCity =
           }
     , _cityPeople = mempty
     , _cityYear = 0
-    , _cityLog = mempty
+    , _cityLog = [(-1, "MiniCity started")]
     }
 
 main :: IO ()
