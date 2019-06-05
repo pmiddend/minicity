@@ -101,6 +101,7 @@ data CityState =
   CityState
     { _cityGrid :: PointedGrid
     , _cityPeople :: CityPeople
+    , _cityYear :: Int
     }
 
 makeLenses ''CityState

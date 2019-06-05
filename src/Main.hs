@@ -22,7 +22,7 @@ import Data.Functor ((<$>))
 import qualified Data.List (unlines)
 import Data.Map (elems)
 import Data.Maybe (Maybe(..), listToMaybe)
-import Data.Monoid (mempty)
+import Data.Monoid ((<>), mempty)
 import Data.Ord (Ord, max, min)
 import Data.String (String)
 import Data.Text.Lazy (Text, toStrict, unlines)
@@ -34,6 +34,7 @@ import Minicity.Types
 import Prelude (Int, (+))
 import System.IO (IO)
 import Text.Pretty.Simple (pShow)
+import Text.Show (show)
 
 emptyCityState :: Point -> CityState
 emptyCityState gs =
@@ -44,6 +45,7 @@ emptyCityState gs =
           , _gridSelected = Point 0 0
           }
     , _cityPeople = mempty
+    , _cityYear = 0
     }
 
 gridPointToChar :: GridPoint -> Char
@@ -92,7 +94,9 @@ cityDraw s =
         borderWithLabel
           (str "People")
           (txt (toStrict (peopleString (s ^. cityPeople))))
-   in [(cityWidget <=> currentPointWidget) <+> personWidget]
+      statusStr = "Year " <> show (s ^. cityYear)
+      statusWidget = str statusStr
+   in [statusWidget <=> ((cityWidget <=> currentPointWidget) <+> personWidget)]
 
 cityChooseCursor ::
      CityState
