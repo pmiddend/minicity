@@ -5,7 +5,8 @@ let
   inherit (nixpkgs) pkgs;
 
   f = { mkDerivation, base, brick, cabal-install, containers
-      , hindent, hlint, stdenv
+      , hindent, hlint, microlens, microlens-ghc, microlens-th, stdenv
+      , vty
       }:
       mkDerivation {
         pname = "minicity";
@@ -13,7 +14,9 @@ let
         src = ./.;
         isLibrary = false;
         isExecutable = true;
-        executableHaskellDepends = [ base brick containers ];
+        executableHaskellDepends = [
+          base brick containers microlens microlens-ghc microlens-th vty
+        ];
         executableToolDepends = [ cabal-install hindent hlint ];
         homepage = "https://github.com/pmiddend/minicity";
         description = "Build a city, keep it in balance";
