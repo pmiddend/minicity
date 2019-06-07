@@ -1,6 +1,5 @@
 { mkDerivation, base, brick, cabal-install, containers, hindent
-, hlint, microlens, microlens-ghc, microlens-th, pretty-simple
-, stdenv, text, vty
+, hlint, lens, pretty-simple, stdenv, text, vty
 }:
 mkDerivation {
   pname = "minicity";
@@ -9,8 +8,7 @@ mkDerivation {
   isLibrary = false;
   isExecutable = true;
   executableHaskellDepends = [
-    base brick containers microlens microlens-ghc microlens-th
-    pretty-simple text vty
+    base brick containers lens pretty-simple text vty
   ];
   executableToolDepends = [ cabal-install hindent hlint ];
   homepage = "https://github.com/pmiddend/minicity";

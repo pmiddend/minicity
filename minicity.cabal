@@ -25,9 +25,7 @@ executable minicity
   build-depends:       base ^>=4.12.0.0
                      , containers
                      , brick
-                     , microlens
-                     , microlens-th
-                     , microlens-ghc
+                     , lens
                      , vty
                      , pretty-simple
                      , text

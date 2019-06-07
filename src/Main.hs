@@ -16,15 +16,14 @@ import Brick.Widgets.Border (borderWithLabel)
 import Brick.Widgets.Core ((<+>), (<=>), str, txt)
 import Control.Applicative (pure)
 import Control.Arrow ((>>>))
+import Control.Lens ((%~), (&), (+~), (.~), (<>~), (^.), (^..), has)
 import Control.Monad (void)
 import Data.Bool (Bool, (||), not)
 import Data.Char (Char)
-import Data.Eq ((==))
 import Data.Foldable (foldMap, toList)
 import Data.Function (($), (.))
 import Data.Functor ((<$>))
 import qualified Data.List (filter, unlines)
-import Data.Map (elems)
 import qualified Data.Map (fromList)
 import Data.Maybe (Maybe(..), listToMaybe)
 import Data.Monoid ((<>), mempty)
@@ -36,7 +35,6 @@ import Data.Text.Lazy (Text, toStrict, unlines)
 import Data.Tuple (fst, snd)
 import Graphics.Vty (defAttr)
 import Graphics.Vty.Input.Events (Event(EvKey), Key(KChar, KEsc))
-import Lens.Micro ((%~), (&), (+~), (.~), (<>~), (^.))
 import Minicity.Point (Point(..))
 import Minicity.Types
 import Prelude (Int, (+), (-))
@@ -46,7 +44,6 @@ import Text.Show (show)
 
 gridPointToChar :: GridPoint -> Char
 gridPointToChar (House _) = 'H'
-gridPointToChar (Store _) = 'S'
 gridPointToChar (Industry _) = 'I'
 gridPointToChar Street = '#'
 gridPointToChar Nature = '.'
@@ -73,8 +70,10 @@ gridToWidget g cursor =
     strRendering <- render (str (gridToString g))
     pure (strRendering {cursors = [CursorLocation (toLocation cursor) Nothing]})
 
-peopleString :: CityPeople -> Text
-peopleString p = unlines (pShow <$> elems p)
+-- peopleString :: CityPeople -> Text
+-- peopleString p = unlines (pShow <$> elems p)
+peopleString :: [PersonData] -> Text
+peopleString p = unlines (pShow <$> p)
 
 cityDraw :: CityState -> [CityWidget]
 cityDraw s =
@@ -86,11 +85,11 @@ cityDraw s =
       currentPoint = pShow (s ^. citySelectedPoint)
       currentPointWidget =
         borderWithLabel (str "Cursor") (txt (toStrict currentPoint))
-      peopleText = (toStrict (peopleString (s ^. cityPeople)))
+      peopleText = toStrict (peopleString (s ^.. cityPeople))
       personWidget =
         borderWithLabel
           (str "People")
-          (if s ^. cityPeople == mempty
+          (if has cityPeople s
              then str "No inhabitants"
              else txt peopleText)
       statusStr = "Year " <> show (s ^. cityYear)
@@ -171,7 +170,6 @@ cityHandleEvent s e =
     VtyEvent (EvKey (KChar 'H') _) -> continue (place s (House Nothing))
     VtyEvent (EvKey (KChar '#') _) -> continue (place s Street)
     VtyEvent (EvKey (KChar ' ') _) -> continue (simulation s)
-    VtyEvent (EvKey (KChar 'S') _) -> continue (place s (Store Nothing))
     VtyEvent (EvKey (KChar 'I') _) -> continue (place s (Industry Nothing))
     VtyEvent (EvKey (KChar 'h') _) -> continue (moveCursor (Point (-1) 0) s)
     VtyEvent (EvKey (KChar 'l') _) -> continue (moveCursor (Point 1 0) s)
@@ -196,8 +194,7 @@ emptyCityState gs =
           { _grid = Grid {_gridSize = gs, _gridData = mempty}
           , _gridSelected = Point 0 0
           }
-    , _cityPeople = mempty
-    , _cityYear = 0
+    , _cityYear = -1
     , _cityLog = mempty
     }
 
@@ -214,13 +211,12 @@ sampleCity =
                       [ (Point 1 1, House Nothing)
                       , (Point 2 1, Street)
                       , (Point 3 1, Street)
-                      , (Point 4 1, Store Nothing)
+                      , (Point 4 1, Industry Nothing)
                       ]
                 }
           , _gridSelected = Point 0 0
           }
-    , _cityPeople = mempty
-    , _cityYear = 0
+    , _cityYear = -1
     , _cityLog = [(-1, "MiniCity started")]
     }
 
@@ -234,6 +230,5 @@ main = do
           , appStartEvent = cityStartEvent
           , appAttrMap = cityAttrMap
           }
-      --initialState = emptyCityState (Point 8 8)
       initialState = sampleCity
   void (defaultMain app initialState)

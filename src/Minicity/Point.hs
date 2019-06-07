@@ -1,11 +1,11 @@
 module Minicity.Point where
 
+import Control.Lens (Lens')
 import Data.Eq (Eq)
 import Data.Functor ((<$>))
 import Data.Int (Int)
 import Data.Monoid ((<>))
 import Data.Ord (Ord)
-import Lens.Micro (Lens')
 import Prelude (Num, (*), (+), abs, fromInteger, negate, signum)
 import Text.Show (Show, show)
 
