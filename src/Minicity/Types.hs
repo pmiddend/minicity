@@ -11,6 +11,7 @@ import Control.Lens
   , _Just
   , at
   , has
+  , lengthOf
   , makeLenses
   , makePrisms
   , non
@@ -22,6 +23,7 @@ import Data.Function ((.))
 import Data.Int (Int)
 import Data.Map (Map)
 import Data.Maybe (Maybe)
+import Data.Ord ((<))
 import Data.Set (Set)
 import Data.String (String)
 import Minicity.Point (Point, _x, _y)
@@ -50,6 +52,9 @@ data IndustryData =
 
 makeLenses ''IndustryData
 
+industryHasCapacity :: IndustryData -> Bool
+industryHasCapacity d = lengthOf industryWorkers d < d ^. industryCapacity
+
 data HouseData =
   HouseData
     { _houseDataInhabitants :: [PersonData]
@@ -60,7 +65,7 @@ makeLenses ''HouseData
 
 data GridPoint
   = House (Maybe HouseData)
-  | Industry (Maybe IndustryData)
+  | Industry IndustryData
   | Street
   | Nature
   deriving (Eq, Show)
@@ -147,3 +152,12 @@ data SimulationState =
     }
 
 makeLenses ''SimulationState
+
+data MovingInData =
+  MovingInData
+    { _movingInCoord :: Point
+    , _movingInGridPoint :: GridPoint
+    , _movingInIndustry :: Point
+    }
+
+makeLenses ''MovingInData

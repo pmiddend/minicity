@@ -11,6 +11,9 @@ paramsMaxAge = 40
 paramsFirstWave :: Int
 paramsFirstWave = 10
 
+paramsIndustryCapacity :: Int
+paramsIndustryCapacity = 2
+
 randomFirstNames :: [String]
 randomFirstNames =
   [ "Philipp"

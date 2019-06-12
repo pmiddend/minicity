@@ -30,15 +30,18 @@ import Control.Lens
   , (^.)
   , (^..)
   , at
+  , filtered
+  , folded
   , has
-  , ifind
+  , itoList
+  , ix
   , use
   )
 import Control.Monad (void)
 import Control.Monad.State (State, runState)
-import Data.Bool (Bool(False, True), (&&), (||), not)
+import Data.Bool (Bool(False, True), (||), not)
 import Data.Char (Char)
-import Data.Foldable (any, foldMap, toList)
+import Data.Foldable (foldMap, toList)
 import Data.Function (($), (.))
 import Data.Functor ((<$>))
 import Data.List ((!!), length, null)
@@ -192,7 +195,8 @@ cityHandleEvent s e =
     VtyEvent (EvKey (KChar 'H') _) -> continue (place s (House Nothing))
     VtyEvent (EvKey (KChar '#') _) -> continue (place s Street)
     VtyEvent (EvKey (KChar ' ') _) -> continue (runSimulation s)
-    VtyEvent (EvKey (KChar 'I') _) -> continue (place s (Industry Nothing))
+    VtyEvent (EvKey (KChar 'I') _) ->
+      continue (place s (Industry (IndustryData mempty paramsIndustryCapacity)))
     VtyEvent (EvKey (KChar 'h') _) -> continue (moveCursor (Point (-1) 0) s)
     VtyEvent (EvKey (KChar 'l') _) -> continue (moveCursor (Point 1 0) s)
     VtyEvent (EvKey (KChar 'j') _) -> continue (moveCursor (Point 0 1) s)
@@ -214,13 +218,23 @@ isEmptyHouse (House (Just hd)) = null (hd ^. houseDataInhabitants)
 isEmptyHouse (House Nothing) = True
 isEmptyHouse _ = False
 
-findEmptyHouse :: Grid -> Maybe (Point, GridPoint)
+findEmptyHouse :: Grid -> Maybe MovingInData
 findEmptyHouse g =
-  let predicate :: Point -> GridPoint -> Bool
-      predicate coord a =
-        let reachable = snd <$> reachableFrom g coord
-         in isEmptyHouse a && any (has _Industry) reachable
-   in ifind predicate (g ^. gridData)
+  let gridPoints :: [(Point, GridPoint)]
+      gridPoints = itoList (g ^. gridData)
+      nonEmptyHouses :: [(Point, GridPoint)]
+      nonEmptyHouses = gridPoints ^.. folded . filtered (isEmptyHouse . snd)
+      withIndustry :: [MovingInData]
+      withIndustry = do
+        (p, gp) <- nonEmptyHouses
+        (ip, igp) <- reachableFrom g p
+        case igp of
+          Industry ind ->
+            if industryHasCapacity ind
+              then [MovingInData p gp ip]
+              else mempty
+          _ -> mempty
+   in listToMaybe withIndustry
 
 log :: String -> State SimulationState ()
 log s = simStateLog <>= [s]
@@ -267,11 +281,17 @@ firstSimulation grid' = firstSimulation' grid' paramsFirstWave
         Nothing -> do
           log (show peopleLeft <> " people left on first day!")
           pure grid''
-        Just (pos, _) -> do
+        Just mid -> do
           newPerson <- randomPerson
           let newHouse = House (Just (HouseData [newPerson]))
               newGrid :: Grid
-              newGrid = grid'' & gridData . at pos ?~ newHouse
+              newGrid =
+                grid'' & gridData . at (mid ^. movingInCoord) ?~ newHouse &
+                gridData .
+                ix (mid ^. movingInIndustry) .
+                _Industry .
+                industryWorkers <>~
+                singleton (newPerson ^. personId)
           firstSimulation' newGrid (peopleLeft - 1)
 
 runSimulation :: CityState -> CityState
@@ -313,7 +333,8 @@ sampleCity =
                       [ (Point 1 1, House Nothing)
                       , (Point 2 1, Street)
                       , (Point 3 1, Street)
-                      , (Point 4 1, Industry Nothing)
+                      , ( Point 4 1
+                        , Industry (IndustryData mempty paramsIndustryCapacity))
                       ]
                 }
           , _pointedGridSelected = Point 0 0
