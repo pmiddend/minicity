@@ -21,14 +21,18 @@ executable minicity
   ghc-options: -Wall -threaded -rtsopts
   other-modules: Minicity.Point
                , Minicity.Types
+               , Minicity.Params
   -- other-extensions:
   build-depends:       base ^>=4.12.0.0
                      , containers
                      , brick
                      , lens
                      , vty
+                     , random
+                     , mtl
                      , pretty-simple
                      , text
+                     , uuid
   hs-source-dirs:      src
   default-language:    Haskell2010
   build-tools:         hlint

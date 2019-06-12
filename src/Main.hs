@@ -1,3 +1,5 @@
+{-# LANGUAGE TupleSections #-}
+
 module Main where
 
 import Brick.AttrMap (AttrMap, attrMap)
@@ -16,13 +18,30 @@ import Brick.Widgets.Border (borderWithLabel)
 import Brick.Widgets.Core ((<+>), (<=>), str, txt)
 import Control.Applicative (pure)
 import Control.Arrow ((>>>))
-import Control.Lens ((%~), (&), (+~), (.~), (<>~), (^.), (^..), has)
+import Control.Lens
+  ( (%~)
+  , (&)
+  , (+~)
+  , (.=)
+  , (.~)
+  , (<>=)
+  , (<>~)
+  , (?~)
+  , (^.)
+  , (^..)
+  , at
+  , has
+  , ifind
+  , use
+  )
 import Control.Monad (void)
-import Data.Bool (Bool, (||), not)
+import Control.Monad.State (State, runState)
+import Data.Bool (Bool(False, True), (||), not)
 import Data.Char (Char)
 import Data.Foldable (foldMap, toList)
 import Data.Function (($), (.))
 import Data.Functor ((<$>))
+import Data.List ((!!), length, null)
 import qualified Data.List (filter, unlines)
 import qualified Data.Map (fromList)
 import Data.Maybe (Maybe(..), listToMaybe)
@@ -35,11 +54,14 @@ import Data.Text.Lazy (Text, toStrict, unlines)
 import Data.Tuple (fst, snd)
 import Graphics.Vty (defAttr)
 import Graphics.Vty.Input.Events (Event(EvKey), Key(KChar, KEsc))
+import Minicity.Params
 import Minicity.Point (Point(..))
 import Minicity.Types
 import Prelude (Int, (+), (-))
 import System.IO (IO)
-import Text.Pretty.Simple (pShow)
+import System.Random (Random, RandomGen, mkStdGen)
+import qualified System.Random (random, randomR)
+import Text.Pretty.Simple (pShowNoColor)
 import Text.Show (show)
 
 gridPointToChar :: GridPoint -> Char
@@ -70,19 +92,19 @@ gridToWidget g cursor =
     strRendering <- render (str (gridToString g))
     pure (strRendering {cursors = [CursorLocation (toLocation cursor) Nothing]})
 
--- peopleString :: CityPeople -> Text
--- peopleString p = unlines (pShow <$> elems p)
 peopleString :: [PersonData] -> Text
-peopleString p = unlines (pShow <$> p)
+peopleString p = unlines (pShowNoColor <$> p)
 
 cityDraw :: CityState -> [CityWidget]
 cityDraw s =
   let cityWidget =
         borderWithLabel
           (str "City")
-          (gridToWidget (s ^. cityGrid . grid) (s ^. cityGrid . gridSelected))
+          (gridToWidget
+             (s ^. cityGrid . pointedGrid)
+             (s ^. cityGrid . pointedGridSelected))
       currentPoint :: Text
-      currentPoint = pShow (s ^. citySelectedPoint)
+      currentPoint = pShowNoColor (s ^. citySelectedPoint)
       currentPointWidget =
         borderWithLabel (str "Cursor") (txt (toStrict currentPoint))
       peopleText = toStrict (peopleString (s ^.. cityPeople))
@@ -122,7 +144,7 @@ moveCursor p s =
         Point
           (clampPos (s ^. cityGrid . width) x)
           (clampPos (s ^. cityGrid . height) y)
-   in s & cityGrid . gridSelected %~ (clampCursor . (+ p))
+   in s & cityGrid . pointedGridSelected %~ (clampCursor . (+ p))
 
 reachableFrom :: CityState -> Point -> [(Point, GridPoint)]
 reachableFrom s = reachableFrom' mempty
@@ -139,7 +161,7 @@ reachableFrom s = reachableFrom' mempty
     validNeighbors :: Point -> Set Point
     validNeighbors = filter (neighborOob >>> not) . neighbors
     resolve :: Point -> GridPoint
-    resolve p = s ^. cityGrid . grid . gridAtWithDefault p
+    resolve p = s ^. cityGrid . pointedGrid . gridAtWithDefault p
     reachableFrom' :: Set Point -> Point -> [(Point, GridPoint)]
     reachableFrom' visited p =
       let nbsSet :: Set Point
@@ -169,7 +191,7 @@ cityHandleEvent s e =
     VtyEvent (EvKey KEsc _) -> halt s
     VtyEvent (EvKey (KChar 'H') _) -> continue (place s (House Nothing))
     VtyEvent (EvKey (KChar '#') _) -> continue (place s Street)
-    VtyEvent (EvKey (KChar ' ') _) -> continue (simulation s)
+    VtyEvent (EvKey (KChar ' ') _) -> continue (runSimulation s)
     VtyEvent (EvKey (KChar 'I') _) -> continue (place s (Industry Nothing))
     VtyEvent (EvKey (KChar 'h') _) -> continue (moveCursor (Point (-1) 0) s)
     VtyEvent (EvKey (KChar 'l') _) -> continue (moveCursor (Point 1 0) s)
@@ -183,19 +205,94 @@ cityStartEvent = pure
 cityAttrMap :: CityState -> AttrMap
 cityAttrMap _ = attrMap defAttr mempty
 
-simulation :: CityState -> CityState
-simulation s = s & cityLog <>~ [(s ^. cityYear, "simulated")] & cityYear +~ 1
+simulation :: Grid -> Year -> State SimulationState Grid
+simulation grid' (-1) = firstSimulation grid'
+simulation grid' _ = pure grid'
+
+isEmptyHouse :: GridPoint -> Bool
+isEmptyHouse (House (Just hd)) = null (hd ^. houseDataInhabitants)
+isEmptyHouse (House Nothing) = True
+isEmptyHouse _ = False
+
+findEmptyHouse :: Grid -> Maybe (Point, GridPoint)
+findEmptyHouse g = ifind (\_ a -> isEmptyHouse a) (g ^. gridData)
+
+log :: String -> State SimulationState ()
+log s = simStateLog <>= [s]
+
+random :: Random a => State SimulationState a
+random = do
+  curGen <- use simStateRng
+  let (v, newGen) = System.Random.random curGen
+  simStateRng .= newGen
+  pure v
+
+randomR :: Random a => (a, a) -> State SimulationState a
+randomR r = do
+  curGen <- use simStateRng
+  let (v, newGen) = System.Random.randomR r curGen
+  simStateRng .= newGen
+  pure v
+
+randomElement' :: RandomGen g => [a] -> g -> (a, g)
+randomElement' l gen =
+  let (v, gen') = System.Random.randomR (0, length l - 1) gen
+   in (l !! v, gen')
+
+randomElement :: [a] -> State SimulationState a
+randomElement l = do
+  index <- randomR (0, length l)
+  pure (l !! index)
+
+randomPerson :: State SimulationState PersonData
+randomPerson = do
+  pid <- random
+  firstName <- randomElement randomFirstNames
+  lastName <- randomElement randomLastNames
+  age <- randomR (paramsMinAge, paramsMaxAge)
+  pure (PersonData pid (firstName <> " " <> lastName) age)
+
+firstSimulation :: Grid -> State SimulationState Grid
+firstSimulation grid' = firstSimulation' grid' paramsFirstWave
+  where
+    firstSimulation' :: Grid -> Int -> State SimulationState Grid
+    firstSimulation' grid'' 0 = pure grid''
+    firstSimulation' grid'' peopleLeft =
+      case findEmptyHouse grid'' of
+        Nothing -> do
+          log (show peopleLeft <> " people left on first day!")
+          pure grid''
+        Just (pos, _) -> do
+          newPerson <- randomPerson
+          let newHouse = House (Just (HouseData [newPerson]))
+              newGrid :: Grid
+              newGrid = grid'' & gridData . at pos ?~ newHouse
+          firstSimulation' newGrid (peopleLeft - 1)
+
+runSimulation :: CityState -> CityState
+runSimulation s =
+  let simState =
+        SimulationState {_simStateRng = s ^. cityRng, _simStateLog = mempty}
+      (newGrid, newSimState) =
+        runState
+          (simulation (s ^. cityGrid . pointedGrid) (s ^. cityYear))
+          simState
+   in s & cityGrid . pointedGrid .~ newGrid & cityYear +~ 1 &
+      (cityLog <>~ ((s ^. cityYear, ) <$> (newSimState ^. simStateLog))) &
+      cityRng .~
+      (newSimState ^. simStateRng)
 
 emptyCityState :: Point -> CityState
 emptyCityState gs =
   CityState
     { _cityGrid =
         PointedGrid
-          { _grid = Grid {_gridSize = gs, _gridData = mempty}
-          , _gridSelected = Point 0 0
+          { _pointedGrid = Grid {_gridSize = gs, _gridData = mempty}
+          , _pointedGridSelected = Point 0 0
           }
     , _cityYear = -1
     , _cityLog = mempty
+    , _cityRng = mkStdGen 0
     }
 
 sampleCity :: CityState
@@ -203,7 +300,7 @@ sampleCity =
   CityState
     { _cityGrid =
         PointedGrid
-          { _grid =
+          { _pointedGrid =
               Grid
                 { _gridSize = Point 8 8
                 , _gridData =
@@ -214,10 +311,11 @@ sampleCity =
                       , (Point 4 1, Industry Nothing)
                       ]
                 }
-          , _gridSelected = Point 0 0
+          , _pointedGridSelected = Point 0 0
           }
     , _cityYear = -1
     , _cityLog = [(-1, "MiniCity started")]
+    , _cityRng = mkStdGen 0
     }
 
 main :: IO ()

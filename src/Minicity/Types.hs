@@ -26,6 +26,7 @@ import Data.Set (Set)
 import Data.String (String)
 import Minicity.Point (Point, _x, _y)
 import Prelude (Integer)
+import System.Random (StdGen)
 import Text.Show (Show)
 
 type PersonId = Integer
@@ -34,6 +35,7 @@ data PersonData =
   PersonData
     { _personId :: PersonId
     , _personName :: String
+    , _personAge :: Int
     }
   deriving (Eq, Show)
 
@@ -74,10 +76,12 @@ isNature = has _Nature
 houseInhabitants :: Traversal' GridPoint PersonData
 houseInhabitants = _House . _Just . houseDataInhabitants . traverse
 
+type GridMap = Map Point GridPoint
+
 data Grid =
   Grid
     { _gridSize :: Point
-    , _gridData :: Map Point GridPoint
+    , _gridData :: GridMap
     }
 
 makeLenses ''Grid
@@ -94,42 +98,52 @@ instance HasDimensions Grid where
 
 data PointedGrid =
   PointedGrid
-    { _grid :: Grid
-    , _gridSelected :: Point
+    { _pointedGrid :: Grid
+    , _pointedGridSelected :: Point
     }
 
 makeLenses ''PointedGrid
 
 instance HasDimensions PointedGrid where
-  dimensions = grid . gridSize
+  dimensions = pointedGrid . gridSize
 
 gridAtWithDefault :: Point -> Lens' Grid GridPoint
 gridAtWithDefault p = gridData . at p . non Nature
 
+type Year = Int
+
 data CityState =
   CityState
     { _cityGrid :: PointedGrid
-    , _cityYear :: Int
-    , _cityLog :: [(Int, String)]
+    , _cityYear :: Year
+    , _cityLog :: [(Year, String)]
+    , _cityRng :: StdGen
     }
 
 makeLenses ''CityState
 
 citySelectedPoint :: Lens' CityState GridPoint
 citySelectedPoint f s =
-  (cityGrid . grid) (gridAtWithDefault (s ^. cityGrid . gridSelected) f) s
+  (cityGrid . pointedGrid)
+    (gridAtWithDefault (s ^. cityGrid . pointedGridSelected) f)
+    s
 
 -- cityPeople :: Getter CityState [PersonData]
 -- cityPeople =
 --   to (\s -> s ^.. cityGrid . grid . gridData . folded . houseInhabitants)
 cityPeople :: Traversal' CityState PersonData
-cityPeople = cityGrid . grid . gridData . traverse . houseInhabitants
-
-cityGrid . grid . gridData . traverse . _House . _Just . houseDataInhabitants .
-  traverse
+cityPeople = cityGrid . pointedGrid . gridData . traverse . houseInhabitants
 
 type CityUiName = ()
 
 type CityUiEvent = ()
 
 type CityWidget = Widget CityUiName
+
+data SimulationState =
+  SimulationState
+    { _simStateRng :: StdGen
+    , _simStateLog :: [String]
+    }
+
+makeLenses ''SimulationState
