@@ -36,9 +36,9 @@ import Control.Lens
   )
 import Control.Monad (void)
 import Control.Monad.State (State, runState)
-import Data.Bool (Bool(False, True), (||), not)
+import Data.Bool (Bool(False, True), (&&), (||), not)
 import Data.Char (Char)
-import Data.Foldable (foldMap, toList)
+import Data.Foldable (any, foldMap, toList)
 import Data.Function (($), (.))
 import Data.Functor ((<$>))
 import Data.List ((!!), length, null)
@@ -146,11 +146,11 @@ moveCursor p s =
           (clampPos (s ^. cityGrid . height) y)
    in s & cityGrid . pointedGridSelected %~ (clampCursor . (+ p))
 
-reachableFrom :: CityState -> Point -> [(Point, GridPoint)]
+reachableFrom :: Grid -> Point -> [(Point, GridPoint)]
 reachableFrom s = reachableFrom' mempty
   where
-    gridWidth = s ^. cityGrid . width
-    gridHeight = s ^. cityGrid . height
+    gridWidth = s ^. width
+    gridHeight = s ^. height
     neighbors :: Point -> Set Point
     neighbors (Point x y) =
       Data.Set.fromList
@@ -161,7 +161,7 @@ reachableFrom s = reachableFrom' mempty
     validNeighbors :: Point -> Set Point
     validNeighbors = filter (neighborOob >>> not) . neighbors
     resolve :: Point -> GridPoint
-    resolve p = s ^. cityGrid . pointedGrid . gridAtWithDefault p
+    resolve p = s ^. gridAtWithDefault p
     reachableFrom' :: Set Point -> Point -> [(Point, GridPoint)]
     reachableFrom' visited p =
       let nbsSet :: Set Point
@@ -215,7 +215,12 @@ isEmptyHouse (House Nothing) = True
 isEmptyHouse _ = False
 
 findEmptyHouse :: Grid -> Maybe (Point, GridPoint)
-findEmptyHouse g = ifind (\_ a -> isEmptyHouse a) (g ^. gridData)
+findEmptyHouse g =
+  let predicate :: Point -> GridPoint -> Bool
+      predicate coord a =
+        let reachable = snd <$> reachableFrom g coord
+         in isEmptyHouse a && any (has _Industry) reachable
+   in ifind predicate (g ^. gridData)
 
 log :: String -> State SimulationState ()
 log s = simStateLog <>= [s]
