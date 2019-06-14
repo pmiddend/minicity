@@ -1,9 +1,11 @@
 {-# LANGUAGE TupleSections #-}
+{-# LANGUAGE OverloadedStrings #-}
 
 module Main where
 
-import Brick.AttrMap (AttrMap, attrMap)
+import Brick.AttrMap (AttrMap, AttrName, attrMap, attrName)
 import Brick.Main (App(..), continue, defaultMain, halt)
+import Brick.Markup (Markup, (@?), markup)
 import Brick.Types
   ( BrickEvent(VtyEvent)
   , CursorLocation(..)
@@ -14,6 +16,7 @@ import Brick.Types
   , Size(Fixed)
   , Widget(..)
   )
+import Brick.Util (bg)
 import Brick.Widgets.Border (borderWithLabel)
 import Brick.Widgets.Core ((<+>), (<=>), str, txt)
 import Control.Applicative (pure)
@@ -32,7 +35,7 @@ import Control.Lens
   , at
   , filtered
   , folded
-  , has
+  , hasn't
   , itoList
   , ix
   , use
@@ -40,11 +43,10 @@ import Control.Lens
 import Control.Monad (void)
 import Control.Monad.State (State, runState)
 import Data.Bool (Bool(False, True), (||), not)
-import Data.Char (Char)
-import Data.Foldable (foldMap, toList)
+import Data.Foldable (fold, foldMap, toList)
 import Data.Function (($), (.))
 import Data.Functor ((<$>))
-import Data.List ((!!), length, null)
+import Data.List ((!!), intersperse, length, null)
 import qualified Data.List (filter, unlines)
 import qualified Data.Map (fromList)
 import Data.Maybe (Maybe(..), listToMaybe)
@@ -54,8 +56,9 @@ import Data.Set (Set, difference, filter, insert, singleton)
 import qualified Data.Set (fromList)
 import Data.String (String)
 import Data.Text.Lazy (Text, toStrict, unlines)
+import Data.Text.Markup (fromText)
 import Data.Tuple (fst, snd)
-import Graphics.Vty (defAttr)
+import Graphics.Vty (defAttr, defAttr, dim, green, withStyle, yellow)
 import Graphics.Vty.Input.Events (Event(EvKey), Key(KChar, KEsc))
 import Minicity.Params
 import Minicity.Point (Point(..))
@@ -67,21 +70,39 @@ import qualified System.Random (random, randomR)
 import Text.Pretty.Simple (pShowNoColor)
 import Text.Show (show)
 
-gridPointToChar :: GridPoint -> Char
-gridPointToChar (House _) = 'H'
-gridPointToChar (Industry _) = 'I'
-gridPointToChar Street = '#'
-gridPointToChar Nature = '.'
+attrHouse :: AttrName
+attrHouse = attrName "house"
 
-gridToString :: Grid -> String
-gridToString g =
-  let rows = [0 .. (g ^. height)]
+attrFull :: AttrName
+attrFull = attrName "full"
+
+attrIndustry :: AttrName
+attrIndustry = attrName "industry"
+
+attrNature :: AttrName
+attrNature = attrName "nature"
+
+gridPointToMarkup :: GridPoint -> Markup AttrName
+gridPointToMarkup (House Nothing) = " " @? attrHouse
+gridPointToMarkup (House _) = "H" @? attrHouse
+gridPointToMarkup (Industry _) = "I" @? attrIndustry
+gridPointToMarkup Street = fromText "#"
+gridPointToMarkup Nature = "." @? attrNature
+
+gridToMarkup :: Grid -> Markup AttrName
+gridToMarkup g =
+  let rows :: [Int]
+      rows = [0 .. (g ^. height)]
+      lines :: [Markup AttrName]
       lines =
         (\y ->
-           (\x -> gridPointToChar (g ^. gridAtWithDefault (Point x y))) <$>
-           [0 .. (g ^. width)]) <$>
+           foldMap
+             (\x -> gridPointToMarkup (g ^. gridAtWithDefault (Point x y)))
+             [0 .. (g ^. width)]) <$>
         rows
-   in Data.List.unlines lines
+      interspersed :: [Markup AttrName]
+      interspersed = intersperse (fromText "\n") lines
+   in fold interspersed
 
 toTuple :: Point -> (Int, Int)
 toTuple (Point x y) = (x, y)
@@ -92,7 +113,7 @@ toLocation = Location . toTuple
 gridToWidget :: Grid -> Point -> CityWidget
 gridToWidget g cursor =
   Widget Fixed Fixed $ do
-    strRendering <- render (str (gridToString g))
+    strRendering <- render (markup (gridToMarkup g))
     pure (strRendering {cursors = [CursorLocation (toLocation cursor) Nothing]})
 
 peopleString :: [PersonData] -> Text
@@ -114,7 +135,7 @@ cityDraw s =
       personWidget =
         borderWithLabel
           (str "People")
-          (if has cityPeople s
+          (if hasn't cityPeople s
              then str "No inhabitants"
              else txt peopleText)
       statusStr = "Year " <> show (s ^. cityYear)
@@ -207,7 +228,13 @@ cityStartEvent :: CityState -> EventM CityUiName CityState
 cityStartEvent = pure
 
 cityAttrMap :: CityState -> AttrMap
-cityAttrMap _ = attrMap defAttr mempty
+cityAttrMap _ =
+  attrMap
+    defAttr
+    [ (attrHouse, bg green `withStyle` dim)
+    , (attrIndustry, bg yellow)
+    , (attrNature, defAttr `withStyle` dim)
+    ]
 
 simulation :: Grid -> Year -> State SimulationState Grid
 simulation grid' (-1) = firstSimulation grid'
