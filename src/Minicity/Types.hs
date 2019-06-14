@@ -133,11 +133,11 @@ citySelectedPoint f s =
     (gridAtWithDefault (s ^. cityGrid . pointedGridSelected) f)
     s
 
--- cityPeople :: Getter CityState [PersonData]
--- cityPeople =
---   to (\s -> s ^.. cityGrid . grid . gridData . folded . houseInhabitants)
-cityPeople :: Traversal' CityState PersonData
-cityPeople = cityGrid . pointedGrid . gridData . traverse . houseInhabitants
+cityStatePeople :: Traversal' CityState PersonData
+cityStatePeople = cityGrid . pointedGrid . gridPeople
+
+gridPeople :: Traversal' Grid PersonData
+gridPeople = gridData . traverse . houseInhabitants
 
 type CityUiName = ()
 

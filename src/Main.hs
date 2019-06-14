@@ -131,11 +131,11 @@ cityDraw s =
       currentPoint = pShowNoColor (s ^. citySelectedPoint)
       currentPointWidget =
         borderWithLabel (str "Cursor") (txt (toStrict currentPoint))
-      peopleText = toStrict (peopleString (s ^.. cityPeople))
+      peopleText = toStrict (peopleString (s ^.. cityStatePeople))
       personWidget =
         borderWithLabel
           (str "People")
-          (if hasn't cityPeople s
+          (if hasn't cityStatePeople s
              then str "No inhabitants"
              else txt peopleText)
       statusStr = "Year " <> show (s ^. cityYear)
@@ -238,7 +238,7 @@ cityAttrMap _ =
 
 simulation :: Grid -> Year -> State SimulationState Grid
 simulation grid' (-1) = firstSimulation grid'
-simulation grid' _ = pure grid'
+simulation grid' _ = pure (grid' & gridPeople . personAge +~ 1)
 
 isEmptyHouse :: GridPoint -> Bool
 isEmptyHouse (House (Just hd)) = null (hd ^. houseDataInhabitants)
