@@ -241,14 +241,14 @@ cityAttrMap _ =
 personDeathProbability :: PersonData -> Double
 personDeathProbability p =
   let x = fromIntegral (p ^. personAge)
-   in 2.2464e-6 * x * x * x - 0.00031 * x * x + 0.01330 * x - 0.16711
+   in 3.569812499e-5 * x * x - 5.54312499e-4 * x
 
 type SimState a = State SimulationState a
 
 inhabitantSurvives :: PersonData -> SimState Bool
 inhabitantSurvives p = do
   let probability = personDeathProbability p
-  rangeValue <- randomR (0, 100)
+  rangeValue <- randomR (0.0, 1.0)
   when
     (rangeValue < probability)
     (log ((p ^. personName) <> " died at the age of " <> show (p ^. personAge)))
