@@ -139,6 +139,9 @@ cityStatePeople = cityGrid . pointedGrid . gridPeople
 gridPeople :: Traversal' Grid PersonData
 gridPeople = gridData . traverse . houseInhabitants
 
+gridHouses :: Traversal' Grid (Maybe HouseData)
+gridHouses = gridData . traverse . _House
+
 type CityUiName = ()
 
 type CityUiEvent = ()

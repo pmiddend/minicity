@@ -22,7 +22,8 @@ import Brick.Widgets.Core ((<+>), (<=>), str, txt)
 import Control.Applicative (pure)
 import Control.Arrow ((>>>))
 import Control.Lens
-  ( (%~)
+  ( (%%~)
+  , (%~)
   , (&)
   , (+~)
   , (.=)
@@ -38,9 +39,10 @@ import Control.Lens
   , hasn't
   , itoList
   , ix
+  , traverse
   , use
   )
-import Control.Monad (void)
+import Control.Monad (filterM, void, when)
 import Control.Monad.State (State, runState)
 import Data.Bool (Bool(False, True), (||), not)
 import Data.Foldable (fold, foldMap, toList)
@@ -63,7 +65,7 @@ import Graphics.Vty.Input.Events (Event(EvKey), Key(KChar, KEsc))
 import Minicity.Params
 import Minicity.Point (Point(..))
 import Minicity.Types
-import Prelude (Int, (+), (-))
+import Prelude (Double, Int, (*), (+), (-), fromIntegral)
 import System.IO (IO)
 import System.Random (Random, RandomGen, mkStdGen)
 import qualified System.Random (random, randomR)
@@ -236,9 +238,35 @@ cityAttrMap _ =
     , (attrNature, defAttr `withStyle` dim)
     ]
 
-simulation :: Grid -> Year -> State SimulationState Grid
+personDeathProbability :: PersonData -> Double
+personDeathProbability p =
+  let x = fromIntegral (p ^. personAge)
+   in 2.2464e-6 * x * x * x - 0.00031 * x * x + 0.01330 * x - 0.16711
+
+type SimState a = State SimulationState a
+
+inhabitantSurvives :: PersonData -> SimState Bool
+inhabitantSurvives p = do
+  let probability = personDeathProbability p
+  rangeValue <- randomR (0, 100)
+  when
+    (rangeValue < probability)
+    (log ((p ^. personName) <> " died at the age of " <> show (p ^. personAge)))
+  pure (rangeValue >= probability)
+
+killInhabitants' :: Maybe HouseData -> SimState (Maybe HouseData)
+killInhabitants' Nothing = pure Nothing
+killInhabitants' (Just h) = do
+  newInhabitants <- filterM inhabitantSurvives (h ^. houseDataInhabitants)
+  case newInhabitants of
+    [] -> pure Nothing
+    _ -> pure (Just (h & houseDataInhabitants .~ newInhabitants))
+
+simulation :: Grid -> Year -> SimState Grid
 simulation grid' (-1) = firstSimulation grid'
-simulation grid' _ = pure (grid' & gridPeople . personAge +~ 1)
+simulation grid' _ = do
+  let grid'' = grid' & gridPeople . personAge +~ 1
+  grid'' & gridData . traverse . _House %%~ killInhabitants'
 
 isEmptyHouse :: GridPoint -> Bool
 isEmptyHouse (House (Just hd)) = null (hd ^. houseDataInhabitants)
@@ -263,17 +291,17 @@ findEmptyHouse g =
           _ -> mempty
    in listToMaybe withIndustry
 
-log :: String -> State SimulationState ()
+log :: String -> SimState ()
 log s = simStateLog <>= [s]
 
-random :: Random a => State SimulationState a
+random :: Random a => SimState a
 random = do
   curGen <- use simStateRng
   let (v, newGen) = System.Random.random curGen
   simStateRng .= newGen
   pure v
 
-randomR :: Random a => (a, a) -> State SimulationState a
+randomR :: Random a => (a, a) -> SimState a
 randomR r = do
   curGen <- use simStateRng
   let (v, newGen) = System.Random.randomR r curGen
@@ -285,12 +313,12 @@ randomElement' l gen =
   let (v, gen') = System.Random.randomR (0, length l - 1) gen
    in (l !! v, gen')
 
-randomElement :: [a] -> State SimulationState a
+randomElement :: [a] -> SimState a
 randomElement l = do
   index <- randomR (0, length l)
   pure (l !! index)
 
-randomPerson :: State SimulationState PersonData
+randomPerson :: SimState PersonData
 randomPerson = do
   pid <- random
   firstName <- randomElement randomFirstNames
@@ -298,10 +326,10 @@ randomPerson = do
   age <- randomR (paramsMinAge, paramsMaxAge)
   pure (PersonData pid (firstName <> " " <> lastName) age)
 
-firstSimulation :: Grid -> State SimulationState Grid
+firstSimulation :: Grid -> SimState Grid
 firstSimulation grid' = firstSimulation' grid' paramsFirstWave
   where
-    firstSimulation' :: Grid -> Int -> State SimulationState Grid
+    firstSimulation' :: Grid -> Int -> SimState Grid
     firstSimulation' grid'' 0 = pure grid''
     firstSimulation' grid'' peopleLeft =
       case findEmptyHouse grid'' of
